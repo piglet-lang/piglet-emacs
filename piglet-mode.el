@@ -75,6 +75,8 @@
 
   (treesit-major-mode-setup))
 
+(add-to-list 'auto-mode-alist '("\\.pig\\'" . piglet-mode))
+
 (provide 'piglet-mode)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
