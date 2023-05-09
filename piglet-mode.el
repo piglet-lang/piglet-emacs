@@ -1,8 +1,8 @@
-;;; piglet-mode.el --- User interface configuration for Corgi -*- lexical-binding: t -*-
+;;; piglet-mode.el --- Major mode for Piglet LISP -*- lexical-binding: t -*-
 
 ;; Author: Arne Brasseur <arne@arnebrasseur.net>
 ;; Filename: piglet-mode.el
-;; Package-Requires: ((treesit) (rainbow-delimiters))
+;; Package-Requires: ((rainbow-delimiters) (aggressive-indent))
 ;; Keywords: piglet languages tree-sitter
 
 ;;; Commentary:
@@ -14,6 +14,7 @@
 
 (require 'treesit)
 (require 'rainbow-delimiters)
+(require 'aggressive-indent)
 
 ;;(setq treesit-language-source-alist nil)
 (add-to-list
@@ -32,12 +33,49 @@
      ((parent-is "vector") first-sibling 1)
      )))
 
-(defvar piglet-mode--font-lock-settings
-  (treesit-font-lock-rules
-   :feature 'parens
-   :language 'piglet
-   '((["(" ")" "[" "]" "{" "}"]) @rainbow-delimiters-depth-2-face)
-   ))
+(setq piglet-mode--font-lock-settings
+      (treesit-font-lock-rules
+       :feature 'brackets
+       :language 'piglet
+       '((_ (_ (_ (_ (_ (_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-7-face)))))))))
+
+       :feature 'brackets
+       :language 'piglet
+       '((_ (_ (_ (_ (_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-6-face))))))))
+
+       :feature 'brackets
+       :language 'piglet
+       '((_ (_ (_ (_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-5-face)))))))
+
+       :feature 'brackets
+       :language 'piglet
+       '((_ (_ (_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-4-face))))))
+
+       :feature 'brackets
+       :language 'piglet
+       '((_ (_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-3-face)))))
+
+       :feature 'brackets
+       :language 'piglet
+       '((_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-2-face))))
+
+       :feature 'brackets
+       :language 'piglet
+       '((_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-1-face)))
+
+       :feature 'keywords
+       :language 'piglet
+       '((symbol1) @font-lock-keyword-face)))
+
+(treesit-query-validate 'piglet '(([(list) (vector)] ["(" ")" "[" "]"]) @rainbow-delimiters-depth-2-face))
+
+(setq piglet-mode--font-features '((brackets keywords)))
+
+(defun piglet-setup-font-lock ()
+  (interactive)
+  (setq-local treesit-font-lock-settings piglet-mode--font-lock-settings)
+  (setq-local treesit-font-lock-feature-list piglet-mode--font-features)
+  (treesit-major-mode-setup))
 
 (define-derived-mode piglet-mode prog-mode "Piglet"
   "Major mode for editing Piglet files."
@@ -46,9 +84,12 @@
         (treesit-install-language-grammar 'piglet)
       (error "Tree-sitter for Piglet isn't available")))
 
-  (rainbow-delimiters-mode)
+  (aggressive-indent-mode)
 
   (treesit-parser-create 'piglet)
+  ;; Font-lock.
+  (setq-local treesit-font-lock-feature-list piglet-mode--font-features)
+  (setq-local treesit-font-lock-settings piglet-mode--font-lock-settings)
 
   ;; Comments
   (setq-local comment-start ";; ")
@@ -65,10 +106,6 @@
   ;; Navigation
   ;; (setq-local treesit-defun-type-regexp ...)
   ;; (setq-local treesit-defun-name-function #'piglet-mode--defun-name)
-
-  ;; Font-lock.
-  (setq-local treesit-font-lock-settings piglet-mode--font-lock-settings)
-  (setq-local treesit-font-lock-feature-list '((parens)))
 
   ;; Imenu.
   ;; (setq-local treesit-simple-imenu-settings '())
