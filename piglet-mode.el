@@ -2,7 +2,7 @@
 
 ;; Author: Arne Brasseur <arne@arnebrasseur.net>
 ;; Filename: piglet-mode.el
-;; Package-Requires: ((rainbow-delimiters) (aggressive-indent))
+;; Package-Requires: ((rainbow-delimiters) (aggressive-indent) (smartparens))
 ;; Keywords: piglet languages tree-sitter
 
 ;;; Commentary:
@@ -15,6 +15,7 @@
 (require 'treesit)
 (require 'rainbow-delimiters)
 (require 'aggressive-indent)
+(require 'smartparens)
 
 ;;(setq treesit-language-source-alist nil)
 (add-to-list
@@ -31,51 +32,95 @@
   '((piglet
      ((parent-is "list") first-sibling 2)
      ((parent-is "vector") first-sibling 1)
+     ((parent-is "dict") first-sibling 1)
      )))
 
 (setq piglet-mode--font-lock-settings
       (treesit-font-lock-rules
        :feature 'brackets
        :language 'piglet
-       '((_ (_ (_ (_ (_ (_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-7-face)))))))))
+       '((_ (_ (_ (_ (_ (_ (_ (_ ["(" ")" "[" "]" "{" "}"] @rainbow-delimiters-depth-8-face)))))))))
 
        :feature 'brackets
        :language 'piglet
-       '((_ (_ (_ (_ (_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-6-face))))))))
+       '((_ (_ (_ (_ (_ (_ (_ ["(" ")" "[" "]" "{" "}"] @rainbow-delimiters-depth-7-face))))))))
 
        :feature 'brackets
        :language 'piglet
-       '((_ (_ (_ (_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-5-face)))))))
+       '((_ (_ (_ (_ (_ (_ ["(" ")" "[" "]" "{" "}"] @rainbow-delimiters-depth-6-face)))))))
 
        :feature 'brackets
        :language 'piglet
-       '((_ (_ (_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-4-face))))))
+       '((_ (_ (_ (_ (_ ["(" ")" "[" "]" "{" "}"] @rainbow-delimiters-depth-5-face))))))
 
        :feature 'brackets
        :language 'piglet
-       '((_ (_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-3-face)))))
+       '((_ (_ (_ (_ ["(" ")" "[" "]" "{" "}"] @rainbow-delimiters-depth-4-face)))))
 
        :feature 'brackets
        :language 'piglet
-       '((_ (_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-2-face))))
+       '((_ (_ (_ ["(" ")" "[" "]" "{" "}"] @rainbow-delimiters-depth-3-face))))
 
        :feature 'brackets
        :language 'piglet
-       '((_ (_ ["(" ")" "[" "]"] @rainbow-delimiters-depth-1-face)))
+       '((_ (_ ["(" ")" "[" "]" "{" "}"] @rainbow-delimiters-depth-2-face)))
 
-       :feature 'keywords
+       :feature 'identifiers
        :language 'piglet
-       '((symbol1) @font-lock-keyword-face)))
+       '((list :anchor (symbol) @font-lock-function-call-face))
 
-(treesit-query-validate 'piglet '(([(list) (vector)] ["(" ")" "[" "]"]) @rainbow-delimiters-depth-2-face))
+       :feature 'identifiers
+       :language 'piglet
+       '((symbol) @default)
 
-(setq piglet-mode--font-features '((brackets keywords)))
+
+       :feature 'identifiers
+       :language 'piglet
+       '((keyword) @font-lock-constant-face)
+
+       :feature 'identifiers
+       :language 'piglet
+       '((prefix_name) @font-lock-constant-face)
+
+       ;; :feature 'built-ins
+       ;; :language 'piglet
+       ;; '((symbol) @font-lock-keyword-face
+       ;;   (:equal @font-lock-keyword-face "defn"))
+
+       ;; :feature 'identifiers
+       ;; :language 'piglet
+       ;; '((qname) @font-lock-constant-face)
+
+       :feature 'numbers
+       :language 'piglet
+       '((number) @font-lock-number-face)
+
+       :feature 'strings
+       :language 'piglet
+       '((string) @font-lock-string-face)
+
+       :feature 'comments
+       :language 'piglet
+       '((comment) @font-lock-comment-face)
+
+       ))
+
+;; (treesit-query-capture 'piglet
+;;                        '((symbol) @font-lock-keyword-face
+;;                          (:equal @font-lock-keyword-face "defn"))
+;;                        )
+
+(setq piglet-mode--font-features '((brackets identifiers strings numbers built-ins comments)))
 
 (defun piglet-setup-font-lock ()
   (interactive)
   (setq-local treesit-font-lock-settings piglet-mode--font-lock-settings)
   (setq-local treesit-font-lock-feature-list piglet-mode--font-features)
   (treesit-major-mode-setup))
+
+(sp-local-pair 'piglet-mode "'" nil :actions nil)
+
+(setq sp-pairs (cdr sp-pairs))
 
 (define-derived-mode piglet-mode prog-mode "Piglet"
   "Major mode for editing Piglet files."
@@ -115,6 +160,12 @@
 (add-to-list 'auto-mode-alist '("\\.pig\\'" . piglet-mode))
 
 (provide 'piglet-mode)
+
+(when nil
+
+  (treesit--install-language-grammar-1 nil 'piglet "https://github.com/piglet-lang/tree-sitter-piglet")
+  (module-load (expand-file-name "tree-sitter/libtree-sitter-piglet.so" user-emacs-directory))
+  )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; piglet-mode.el ends here

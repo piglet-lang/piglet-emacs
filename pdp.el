@@ -19,10 +19,7 @@
 (defun pdp--on-open (ws)
   (message "PDP conn Opened %S" ws)
   (add-to-list #'pdp--connections ws))
-(alist-get "op"
-           '
-           (("op" . "eval") ("result" . "3"))
-           nil nil #'equal)
+
 (defun pdp--on-message (ws frame)
   (let* ((msg (cbor->elisp (websocket-frame-payload frame)))
          (op (alist-get "op" msg nil nil #'equal)))
@@ -35,11 +32,8 @@
         (seq-remove (lambda (conn) (eq ws conn))
                     pdp--connections)))
 
-;; (lambda (ws frame)
-;;   (websocket-send-text
-;;    ws (websocket-frame-text frame)))
-
 (defun pdp-start-server! ()
+  (interactive)
   (when (not pdp--server)
     (setq pdp--server
           (websocket-server
@@ -50,6 +44,7 @@
            :on-close #'pdp--on-close))))
 
 (defun pdp-stop-server! ()
+  (interactive)
   (when pdp--server
     (websocket-server-close pdp--server))
   (setq pdp--server nil)
@@ -86,12 +81,6 @@
 
 ;; (pdp-stop-server!)
 ;; (pdp-start-server!)
-;; pdp--server
-;; (seq-remove
-;;  (lambda (conn)
-;;    (eq conn
-;;        (car pdp--connections)))
-;;  pdp--connections)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; pdp.el ends here
