@@ -30,6 +30,7 @@
 
 (defvar piglet-ts--indent-rules
   '((piglet
+     ((parent-is "source") first-sibling 0)
      ((parent-is "list") first-sibling 2)
      ((parent-is "vector") first-sibling 1)
      ((parent-is "dict") first-sibling 1)
