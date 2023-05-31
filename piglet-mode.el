@@ -2,8 +2,6 @@
 
 ;; Author: Arne Brasseur <arne@arnebrasseur.net>
 ;; Filename: piglet-mode.el
-;; Package-Requires: ((rainbow-delimiters) (aggressive-indent) (smartparens))
-;; Keywords: piglet languages tree-sitter
 
 ;;; Commentary:
 
@@ -17,24 +15,19 @@
 (require 'aggressive-indent)
 (require 'smartparens)
 
-;;(setq treesit-language-source-alist nil)
+(when (not (fboundp 'treesit-language-available-p))
+  (read-key "WARNING: Emacs was not compiled with tree-sitter support (--with-tree-sitter), make sure libtree-sitter0 is installed before building."))
+
 (add-to-list
  'treesit-language-source-alist
- '(piglet ;;"https://github.com/piglet-lang/tree-sitter-piglet.git"
-   "/home/arne/github/tree-sitter-piglet"
-   ))
-
-;; (treesit-install-language-grammar 'piglet)
-(defvar piglet-mode-indent-offset
-  2)
+ '(piglet "https://github.com/piglet-lang/tree-sitter-piglet.git"))
 
 (defvar piglet-ts--indent-rules
   '((piglet
      ((parent-is "source") first-sibling 0)
      ((parent-is "list") first-sibling 2)
      ((parent-is "vector") first-sibling 1)
-     ((parent-is "dict") first-sibling 1)
-     )))
+     ((parent-is "dict") first-sibling 1))))
 
 (setq piglet-mode--font-lock-settings
       (treesit-font-lock-rules
@@ -121,8 +114,6 @@
 
 (sp-local-pair 'piglet-mode "'" nil :actions nil)
 
-(setq sp-pairs (cdr sp-pairs))
-
 (define-derived-mode piglet-mode prog-mode "Piglet"
   "Major mode for editing Piglet files."
   (unless (treesit-ready-p 'piglet)
@@ -158,7 +149,8 @@
 
   (treesit-major-mode-setup))
 
-(add-to-list 'auto-mode-alist '("\\.pig\\'" . piglet-mode))
+(add-to-list 'auto-mode-alist '("\\.pig\\'" . piglet-mode)) ;; currently in use
+(add-to-list 'auto-mode-alist '("\\.pigl\\'" . piglet-mode)) ;; we're planning to use this instead
 
 (provide 'piglet-mode)
 
