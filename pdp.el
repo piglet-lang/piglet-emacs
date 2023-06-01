@@ -75,6 +75,20 @@
      (treesit-query-capture 'piglet
                             '((list) @expr) (point) (+ (point) 1))))))
 
+(defun pdp-eval-last-sexp ()
+  (interactive)
+  (let* ((start (scan-sexps (point) -1))
+         (node (treesit-node-at start)))
+    (pdp-op-eval
+     (treesit-node-text
+      (if (treesit-node-check node 'named)
+          node
+        (treesit-node-parent node))))))
+
+(defun pdp-eval-buffer ()
+  (interactive)
+  (pdp-op-eval
+   (buffer-substring (point-min) (point-max))))
 
 (provide 'pdp)
 
