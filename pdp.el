@@ -64,7 +64,9 @@
 (defun pdp-op-eval (code-str)
   (pdp-send
    `(("op" . "eval")
-     ("code" . ,code-str))))
+     ("code" . ,code-str)
+     ("location" . ,buffer-file-name)
+     ("package" . ,piglet-package-name))))
 
 (defun pdp-eval-outer-sexp ()
   (interactive)

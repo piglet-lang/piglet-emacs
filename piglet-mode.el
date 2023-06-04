@@ -114,6 +114,23 @@
 
 (sp-local-pair 'piglet-mode "'" nil :actions nil)
 
+(setq piglet--find-package-name-query
+      (treesit-query-compile
+       'piglet
+       "(source
+          (dict
+            (prefix_name) @prefix . (symbol) @sym)
+            (#equal @prefix \":pkg:name\"))"))
+
+(defun piglet--package-name (file)
+  (let* ((pkg-root (locate-dominating-file file "package.pig"))
+         (pkg-pig (expand-file-name "package.pig" pkg-root)))
+    (with-temp-buffer
+      (insert-file-contents pkg-pig)
+      (treesit-parser-create 'piglet)
+      (treesit-node-text
+       (cdr (assoc 'sym (treesit-query-capture 'piglet piglet--find-package-name-query)))))))
+
 (define-derived-mode piglet-mode prog-mode "Piglet"
   "Major mode for editing Piglet files."
   (unless (treesit-ready-p 'piglet)
@@ -147,7 +164,9 @@
   ;; Imenu.
   ;; (setq-local treesit-simple-imenu-settings '())
 
-  (treesit-major-mode-setup))
+  (treesit-major-mode-setup)
+
+  (setq-local piglet-package-name (piglet--package-name buffer-file-name)))
 
 (add-to-list 'auto-mode-alist '("\\.pig\\'" . piglet-mode)) ;; currently in use
 (add-to-list 'auto-mode-alist '("\\.pigl\\'" . piglet-mode)) ;; we're planning to use this instead
