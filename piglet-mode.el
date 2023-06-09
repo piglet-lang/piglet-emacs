@@ -122,6 +122,14 @@
             (prefix_name) @prefix . (symbol) @sym)
             (#equal @prefix \":pkg:name\"))"))
 
+(setq piglet--find-module-name-query
+      (treesit-query-compile
+       'piglet
+       "(source .
+          (list
+            (symbol) @list-head . (symbol) @name)
+            (#equal @list-head \"module\"))"))
+
 (defun piglet--package-name (file)
   (let* ((pkg-root (locate-dominating-file file "package.pig"))
          (pkg-pig (expand-file-name "package.pig" pkg-root)))
@@ -131,11 +139,15 @@
       (treesit-node-text
        (cdr (assoc 'sym (treesit-query-capture 'piglet piglet--find-package-name-query)))))))
 
+(defun piglet--module-name ()
+  (treesit-node-text
+   (cdr (assoc 'name (treesit-query-capture 'piglet piglet--find-module-name-query)))))
+
 (defun piglet-mode--is-def-sym-p (node)
   (and (equal "symbol" (treesit-node-type node))
        (equal "list" (treesit-node-type (treesit-node-parent node)))
        (member (treesit-node-text (treesit-node-child (treesit-node-parent node) 1))
-               '("def" "defn"))
+               '("def" "defn" "defmacro"))
        (equal node (treesit-node-child (treesit-node-parent node) 2))))
 
 (define-derived-mode piglet-mode prog-mode "Piglet"

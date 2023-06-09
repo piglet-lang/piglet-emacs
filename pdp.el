@@ -15,22 +15,30 @@
 
 (setq pdp--connections ())
 (setq pdp--server nil)
+(setq pdp--message-counter 0)
+(setq pdp--handlers ())
+
+(defun pdp--msg-get (msg k)
+  (alist-get k msg nil nil #'equal))
 
 (defun pdp--on-open (ws)
-  (message "PDP conn Opened %S" ws)
-  (add-to-list #'pdp--connections ws))
+  (add-to-list #'pdp--connections ws)
+  (message "[Piglet] PDP conn opened, %d active connections" (length pdp--connections)))
 
 (defun pdp--on-message (ws frame)
   (let* ((msg (cbor->elisp (websocket-frame-payload frame)))
-         (op (alist-get "op" msg nil nil #'equal)))
-    (when (equal op "eval")
-      (message "=> %s" (alist-get "result" msg nil nil #'equal)))))
+         (op (pdp--msg-get msg "op"))
+         (to (pdp--msg-get msg "to"))
+         (handler (alist-get to pdp--handlers)))
+    (if handler
+        (funcall handler msg)
+      (message "=> %s" (pdp--msg-get msg "result")))))
 
 (defun pdp--on-close (ws)
-  (message "PDP conn closed %S" ws)
   (setq pdp--connections
         (seq-remove (lambda (conn) (eq ws conn))
-                    pdp--connections)))
+                    pdp--connections))
+  (message "[Piglet] PDP conn closed, %d active connections" (length pdp--connections)))
 
 (defun pdp-start-server! ()
   (interactive)
@@ -50,53 +58,110 @@
   (setq pdp--server nil)
   (setq pdp--connections nil))
 
-(defun pdp-send (value)
-  (seq-do (lambda (client)
-            (if (websocket-openp client)
+(defun pdp-msg (kvs)
+  (append
+   kvs
+   `(("location" . ,buffer-file-name)
+     ("module" . ,(piglet--module-name))
+     ("package" . ,piglet-package-name))))
+
+(defun pdp-add-handler (msg handler)
+  (setq pdp--message-counter (+ pdp--message-counter 1))
+  (setq pdp--handlers (cons (cons pdp--message-counter handler)
+                            pdp--handlers))
+  (append msg
+          `(("reply-to" . ,pdp--message-counter))))
+
+(defun pdp-send (msg)
+  (let ((payload (cbor<-elisp msg)))
+    (seq-do (lambda (client)
+              (when (websocket-openp client)
                 (websocket-send
                  client
                  (make-websocket-frame
                   :opcode 'binary
-                  :payload (cbor<-elisp value)
+                  :payload payload
                   :completep t))))
-          pdp--connections))
+            pdp--connections)))
 
-(defun pdp-op-eval (code-str)
+(defun pdp-op-eval (code-str start line)
   (set-text-properties 0 (length code-str) nil code-str)
   (pdp-send
-   `(("op" . "eval")
-     ("code" . ,code-str)
-     ("location" . ,buffer-file-name)
-     ("package" . ,piglet-package-name))))
+   (pdp-msg
+    `(("op" . "eval")
+      ("code" . ,code-str)
+      ("line" . ,line)
+      ("start" . ,start)))))
+
+(setq pdp--start-query
+      (treesit-query-compile
+       'piglet
+       "(source . (dict (keyword) @kw . (number) @val) (#equal @kw \":start\"))"))
+
+(setq pdp--file-query
+      (treesit-query-compile
+       'piglet
+       "(source . (dict (keyword) @kw . (string) @val) (#equal @kw \":file\"))"))
+
+(defun pdp-op-resolve-meta (var-sym handler)
+  (pdp-send
+   (pdp-add-handler
+    (pdp-msg
+     `(("op" . "resolve-meta")
+       ("var" . ,var-sym)))
+    handler)))
+
+(defun pdp-jump-to-definition ()
+  (interactive)
+  (let ((node (treesit-node-at (point))))
+    (when (equal "symbol" (treesit-node-type node))
+      (pdp-op-resolve-meta
+       (treesit-node-text node)
+       (lambda (reply)
+         (with-temp-buffer
+           (insert (pdp--msg-get reply "result"))
+           (treesit-parser-create 'piglet)
+           (let ((file (treesit-node-text
+                        (cdr (assoc 'val (treesit-query-capture 'piglet pdp--file-query)))))
+                 (char (treesit-node-text
+                        (cdr (assoc 'val (treesit-query-capture 'piglet pdp--start-query))))))
+             (with-current-buffer (find-file (json-parse-string file))
+               (goto-char (string-to-number char))))))))))
+
+(defun pdp-eval-node (node)
+  (pdp-op-eval
+   (treesit-node-text node)
+   (treesit-node-start node)
+   (line-number-at-pos (treesit-node-start node))))
 
 (defun pdp-eval-outer-sexp ()
   (interactive)
-  (pdp-op-eval
-   (treesit-node-text
-    (alist-get
-     'expr
-     (treesit-query-capture 'piglet
-                            '((list) @expr) (point) (+ (point) 1))))))
+  (pdp-eval-node
+   (alist-get
+    'expr
+    (treesit-query-capture 'piglet
+                           '((list) @expr) (point) (+ (point) 1)))))
 
 (defun pdp-eval-last-sexp ()
   (interactive)
   (let* ((start (scan-sexps (point) -1))
          (node (treesit-node-at start)))
-    (pdp-op-eval
-     (treesit-node-text
-      (if (treesit-node-check node 'named)
-          node
-        (treesit-node-parent node))))))
+    (pdp-eval-node
+     (if (treesit-node-check node 'named)
+         node
+       (treesit-node-parent node)))))
 
 (defun pdp-eval-buffer ()
   (interactive)
   (pdp-op-eval
-   (buffer-substring (point-min) (point-max))))
+   (buffer-substring (point-min) (point-max)) 0 0))
 
 (defun pdp-eval-region ()
   (interactive)
   (pdp-op-eval
-   (buffer-substring (mark) (point))))
+   (buffer-substring (mark) (point))
+   (mark)
+   (line-number-at-pos (mark))))
 
 (provide 'pdp)
 
