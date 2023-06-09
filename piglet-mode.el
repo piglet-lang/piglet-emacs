@@ -131,6 +131,13 @@
       (treesit-node-text
        (cdr (assoc 'sym (treesit-query-capture 'piglet piglet--find-package-name-query)))))))
 
+(defun piglet-mode--is-def-sym-p (node)
+  (and (equal "symbol" (treesit-node-type node))
+       (equal "list" (treesit-node-type (treesit-node-parent node)))
+       (member (treesit-node-text (treesit-node-child (treesit-node-parent node) 1))
+               '("def" "defn"))
+       (equal node (treesit-node-child (treesit-node-parent node) 2))))
+
 (define-derived-mode piglet-mode prog-mode "Piglet"
   "Major mode for editing Piglet files."
   (unless (treesit-ready-p 'piglet)
@@ -156,6 +163,11 @@
 
   ;; Indent
   (setq-local treesit-simple-indent-rules piglet-ts--indent-rules)
+
+  ;; Imenu
+  (setq-local treesit-defun-name-function #'treesit-node-text)
+  (setq-local treesit-simple-imenu-settings
+              '((nil "\\`symbol\\'" piglet-mode--is-def-sym-p nil)))
 
   ;; Navigation
   ;; (setq-local treesit-defun-type-regexp ...)

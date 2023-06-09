@@ -62,6 +62,7 @@
           pdp--connections))
 
 (defun pdp-op-eval (code-str)
+  (set-text-properties 0 (length code-str) nil code-str)
   (pdp-send
    `(("op" . "eval")
      ("code" . ,code-str)
@@ -91,6 +92,11 @@
   (interactive)
   (pdp-op-eval
    (buffer-substring (point-min) (point-max))))
+
+(defun pdp-eval-region ()
+  (interactive)
+  (pdp-op-eval
+   (buffer-substring (mark) (point))))
 
 (provide 'pdp)
 
