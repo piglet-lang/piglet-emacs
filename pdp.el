@@ -12,6 +12,7 @@
 (require 'websocket)
 (require 'cbor)
 (require 'seq)
+(require 'xref)
 
 (setq pdp--connections ())
 (setq pdp--server nil)
@@ -73,6 +74,7 @@
           `(("reply-to" . ,pdp--message-counter))))
 
 (defun pdp-send (msg)
+  ;; (message "[PDP] -> %S" msg)
   (let ((payload (cbor<-elisp msg)))
     (seq-do (lambda (client)
               (when (websocket-openp client)
@@ -118,6 +120,7 @@
       (pdp-op-resolve-meta
        (treesit-node-text node)
        (lambda (reply)
+         (xref-push-marker-stack)
          (with-temp-buffer
            (insert (pdp--msg-get reply "result"))
            (treesit-parser-create 'piglet)
