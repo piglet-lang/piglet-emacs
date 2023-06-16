@@ -86,14 +86,24 @@
                   :completep t))))
             pdp--connections)))
 
-(defun pdp-op-eval (code-str start line)
+(defun pdp-op-eval (code-str start line insert)
   (set-text-properties 0 (length code-str) nil code-str)
-  (pdp-send
-   (pdp-msg
-    `(("op" . "eval")
-      ("code" . ,code-str)
-      ("line" . ,line)
-      ("start" . ,start)))))
+  (let ((msg (pdp-msg
+              `(("op" . "eval")
+                ("code" . ,code-str)
+                ("line" . ,line)
+                ("start" . ,start)))))
+    (pdp-send
+     (if insert
+         (pdp-add-handler
+          msg
+          (lambda (msg)
+            (when (not (and (bolp) (eolp)))
+              (end-of-line)
+              (insert "\n"))
+            (insert "=> ")
+            (insert (pdp--msg-get msg "result"))))
+       msg))))
 
 (setq pdp--start-query
       (treesit-query-compile
@@ -131,40 +141,45 @@
              (with-current-buffer (find-file (json-parse-string file))
                (goto-char (string-to-number char))))))))))
 
-(defun pdp-eval-node (node)
+(defun pdp-eval-node (node insert)
   (pdp-op-eval
    (treesit-node-text node)
    (treesit-node-start node)
-   (line-number-at-pos (treesit-node-start node))))
+   (line-number-at-pos (treesit-node-start node))
+   insert))
 
-(defun pdp-eval-outer-sexp ()
-  (interactive)
+(defun pdp-eval-outer-sexp (prefix)
+  (interactive "P")
   (pdp-eval-node
    (alist-get
     'expr
     (treesit-query-capture 'piglet
-                           '((list) @expr) (point) (+ (point) 1)))))
+                           '((list) @expr) (point) (+ (point) 1)))
+   prefix))
 
-(defun pdp-eval-last-sexp ()
-  (interactive)
+(defun pdp-eval-last-sexp (prefix)
+  (interactive "P")
   (let* ((start (scan-sexps (point) -1))
          (node (treesit-node-at start)))
     (pdp-eval-node
      (if (treesit-node-check node 'named)
          node
-       (treesit-node-parent node)))))
+       (treesit-node-parent node))
+     prefix)))
 
 (defun pdp-eval-buffer ()
   (interactive)
   (pdp-op-eval
-   (buffer-substring (point-min) (point-max)) 0 0))
+   (buffer-substring (point-min) (point-max)) 0 0
+   nil))
 
 (defun pdp-eval-region ()
   (interactive)
   (pdp-op-eval
    (buffer-substring (mark) (point))
    (mark)
-   (line-number-at-pos (mark))))
+   (line-number-at-pos (mark))
+   nil))
 
 (provide 'pdp)
 
