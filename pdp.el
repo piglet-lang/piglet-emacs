@@ -30,7 +30,7 @@
   (let* ((msg (cbor->elisp (websocket-frame-payload frame)))
          (op (pdp--msg-get msg "op"))
          (to (pdp--msg-get msg "to"))
-         (handler (alist-get to pdp--handlers)))
+         (handler (and to (alist-get to pdp--handlers))))
     (if handler
         (funcall handler msg)
       (message "=> %s" (pdp--msg-get msg "result")))))
