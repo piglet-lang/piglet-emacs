@@ -20,6 +20,9 @@
 (setq pdp--handlers ())
 (setq pdp--result-buffer "*pdp-result*")
 
+;; To debug issues set this variable
+;; (setq websocket-callback-debug-on-error t)
+
 (defun pdp--msg-get (msg k)
   (alist-get k msg nil nil #'equal))
 
