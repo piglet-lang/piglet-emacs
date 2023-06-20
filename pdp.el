@@ -193,6 +193,20 @@
                            '((list) @expr) (point) (+ (point) 1)))
    prefix))
 
+(defun pdp-eval-outer-sexp-to-comment ()
+  "Helper function to call `pdp-eval-outer-sexp` and inserts the result as a
+  comment on the next line."
+  (interactive)
+  (let ((current-prefix-arg 1))
+    (call-interactively #'pdp-eval-outer-sexp)))
+
+(defun pdp-eval-outer-sexp-to-buffer ()
+  "Helper function to call `pdp-eval-outer-sexp` and inserts the result into a
+  *pdp-result* buffer."
+  (interactive)
+  (let ((current-prefix-arg 2))
+    (call-interactively #'pdp-eval-outer-sexp)))
+
 (defun pdp-eval-last-sexp (prefix)
   "Evaluate the last sexp at point. If PREFIX exists or is 1 then insert
    the result into the current buffer. If PREFIX is 2 then insert the result
@@ -205,6 +219,20 @@
          node
        (treesit-node-parent node))
      prefix)))
+
+(defun pdp-eval-last-sexp-to-comment ()
+  "Helper function to call `pdp-eval-last-sexp` and inserts the result as a
+  comment on the next line."
+  (interactive)
+  (let ((current-prefix-arg 1))
+    (call-interactively #'pdp-eval-last-sexp)))
+
+(defun pdp-eval-last-sexp-to-buffer ()
+  "Helper function to call `pdp-eval-last-sexp` and inserts the result into a
+  *pdp-result* buffer."
+  (interactive)
+  (let ((current-prefix-arg 2))
+    (call-interactively #'pdp-eval-last-sexp)))
 
 (defun pdp-eval-buffer ()
   (interactive)
