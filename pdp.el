@@ -43,21 +43,25 @@
 
 (defun pdp-start-server! ()
   (interactive)
-  (when (not pdp--server)
-    (setq pdp--server
-          (websocket-server
-           17017
-           :host 'local
-           :on-open #'pdp--on-open
-           :on-message #'pdp--on-message
-           :on-close #'pdp--on-close))))
+  (if (not pdp--server)
+      (progn
+        (setq pdp--server
+              (websocket-server
+               17017
+               :host 'local
+               :on-open #'pdp--on-open
+               :on-message #'pdp--on-message
+               :on-close #'pdp--on-close))
+        (message "[Piglet] PDP server started on port: 17017"))
+    (message "[Piglet] PDP server already running.")))
 
 (defun pdp-stop-server! ()
   (interactive)
   (when pdp--server
     (websocket-server-close pdp--server))
   (setq pdp--server nil)
-  (setq pdp--connections nil))
+  (setq pdp--connections nil)
+  (message "[Piglet] PDP server stopped."))
 
 (defun pdp-msg (kvs)
   (append
