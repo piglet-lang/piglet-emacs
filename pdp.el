@@ -18,6 +18,7 @@
 (setq pdp--server nil)
 (setq pdp--message-counter 0)
 (setq pdp--handlers ())
+(setq pdp--result-buffer "*pdp-result*")
 
 (defun pdp--msg-get (msg k)
   (alist-get k msg nil nil #'equal))
@@ -105,16 +106,32 @@
                 ("line" . ,line)
                 ("start" . ,start)))))
     (pdp-send
-     (if insert
-         (pdp-add-handler
-          msg
-          (lambda (msg)
-            (when (not (and (bolp) (eolp)))
-              (end-of-line)
-              (insert "\n"))
-            (insert "=> ")
-            (insert (pdp--msg-get msg "result"))))
-       msg))))
+     ;; insert result on next line in the src buffer
+     (cond
+      ((or (equal insert 1) (equal insert '(4)))
+       (pdp-add-handler
+        msg
+        (lambda (msg)
+          (when (not (and (bolp) (eolp)))
+            (end-of-line)
+            (insert "\n"))
+          (insert "=> ")
+          (insert (pdp--msg-get msg "result")))))
+      ;; insert result into a *pdp-result* buffer
+      ((equal insert 2)
+       (pdp-add-handler
+        msg
+        (lambda (msg)
+          (with-current-buffer (get-buffer-create pdp--result-buffer)
+            (erase-buffer)
+            (insert (pdp--msg-get msg "result"))
+            (goto-char (point-min))
+            (display-buffer (current-buffer))
+            (piglet-mode)
+            ;; (read-only-mode)
+            ;; (local-set-key (kbd "q") (lambda () (interactive) (kill-buffer-and-window)))
+            ))))
+      (t msg)))))
 
 (setq pdp--start-query
       (treesit-query-compile
@@ -162,6 +179,9 @@
    insert))
 
 (defun pdp-eval-outer-sexp (prefix)
+  "Evaluate the outermost sexp at point. If PREFIX exists or is 1 then insert
+   the result into the current buffer. If PREFIX is 2 then insert the result
+   into a *pdp-result* buffer."
   (interactive "P")
   (pdp-eval-node
    (alist-get
@@ -171,6 +191,9 @@
    prefix))
 
 (defun pdp-eval-last-sexp (prefix)
+  "Evaluate the last sexp at point. If PREFIX exists or is 1 then insert
+   the result into the current buffer. If PREFIX is 2 then insert the result
+   into a *pdp-result* buffer."
   (interactive "P")
   (let* ((start (scan-sexps (point) -1))
          (node (treesit-node-at start)))
