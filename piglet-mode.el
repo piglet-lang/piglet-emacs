@@ -190,7 +190,8 @@
 
   (treesit-major-mode-setup)
 
-  (setq-local piglet-package-name (piglet--package-name buffer-file-name)))
+  (setq-local piglet-package-name (piglet--package-name buffer-file-name))
+  )
 
 (add-to-list 'auto-mode-alist '("\\.pig\\'" . piglet-mode)) ;; currently in use
 (add-to-list 'auto-mode-alist '("\\.pigl\\'" . piglet-mode)) ;; we're planning to use this instead

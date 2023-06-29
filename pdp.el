@@ -134,6 +134,7 @@
        ("var" . ,var-sym)))
     handler)))
 
+;; When used with a browser it's best to enable `url-handler-mode'
 (defun pdp-jump-to-definition ()
   (interactive)
   (let ((node (treesit-node-at (point))))
@@ -142,6 +143,7 @@
        (treesit-node-text node)
        (lambda (reply)
          (xref-push-marker-stack)
+         ;; (message "RESULT %s" reply)
          (with-temp-buffer
            (insert (pdp--msg-get reply "result"))
            (treesit-parser-create 'piglet)

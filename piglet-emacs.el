@@ -12,6 +12,7 @@
 
 (require 'piglet-mode)
 (require 'pdp)
+(require 'piglet-company)
 
 (provide 'piglet-emacs)
 

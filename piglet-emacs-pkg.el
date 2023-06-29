@@ -7,6 +7,8 @@
     (smartparens "1.11.0")
     ;; pdp
     (websocket "1.14")
-    (cbor "20230429"))
+    (cbor "20230429")
+    ;; piglet-company
+    (company "0.9.13"))
   :homepage "https://github.com/piglet-lang"
   :keywords '("piglet" "languages" "lisp" "tree-sitter"))
