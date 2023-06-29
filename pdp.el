@@ -14,11 +14,44 @@
 (require 'seq)
 (require 'xref)
 
-(setq pdp--connections ())
-(setq pdp--server nil)
-(setq pdp--message-counter 0)
-(setq pdp--handlers ())
-(setq pdp--result-buffer "*pdp-result*")
+(defcustom pdp-result-buffer-name "*piglet-result*"
+  "Buffer name to use when showing evaluation results in a separate buffer."
+  :type 'string
+  :safe #'stringp
+  :group 'piglet)
+
+(defcustom pdp-result-destination 'minibuffer
+  "Where should, by default, evaluation results be shown"
+  :type '(choice (const :tag "Minibuffer" minibuffer)
+                 (const :tag "Result buffer" result-buffer)
+                 (const :tag "REPL buffer" repl-buffer))
+  :safe #'symbolp
+  :group 'piglet)
+
+(defcustom pdp-pretty-print-result-p nil
+  "Should evaluation results by default be pretty printed?"
+  :type 'boolean
+  :safe #'booleanp
+  :group 'piglet)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Internals
+
+(defvar pdp--connections
+  ()
+  "List of active PDP connections.")
+
+(defvar pdp--server
+  nil
+  "PDP websocket server, see `pdp-start-server!'")
+
+(defvar pdp--message-counter
+  0
+  "Incrementing value used to match replies to handlers.")
+
+(defvar pdp--handlers
+  ()
+  "Association list from message number to handler function.")
 
 ;; To debug issues set this variable
 ;; (setq websocket-callback-debug-on-error t)
@@ -35,9 +68,8 @@
          (op (pdp--msg-get msg "op"))
          (to (pdp--msg-get msg "to"))
          (handler (and to (alist-get to pdp--handlers))))
-    (if handler
-        (funcall handler msg)
-      (message "=> %s" (pdp--msg-get msg "result")))))
+    (when handler
+      (funcall handler msg))))
 
 (defun pdp--on-close (ws)
   (setq pdp--connections
@@ -90,6 +122,8 @@
 
 (defun pdp-send (msg)
   ;; (message "[PDP] -> %S" msg)
+  ;; (message (apply 'concat (mapcar (lambda (x) (format "%02x" x))
+  ;;                                 (cbor<-elisp msg))))
   (let ((payload (cbor<-elisp msg)))
     (seq-do (lambda (client)
               (when (websocket-openp client)
@@ -101,40 +135,52 @@
                   :completep t))))
             pdp--connections)))
 
-(defun pdp-op-eval (code-str start line insert)
+(defun pdp--eval-minibuffer-handler (result)
+  (message "=> %s" result))
+
+(defun pdp--eval-insert-handler (result)
+  (when (not (and (bolp) (eolp)))
+    (end-of-line)
+    (insert "\n"))
+  (insert "=> ")
+  (insert result))
+
+(defun pdp--eval-to-buffer-handler (result)
+  (with-current-buffer (get-buffer-create pdp-result-buffer-name)
+    (erase-buffer)
+    (insert result)
+    (goto-char (point-min))
+    (display-buffer (current-buffer))
+    (piglet-mode)))
+
+(defun pdp--get-eval-handler (opts)
+  (let* ((destination (if-let ((dest (assoc 'destination opts)))
+                          (cdr dest)
+                        pdp-result-destination))
+         (pretty-print (if-let ((pp (assoc 'pretty-print opts)))
+                           (cdr pp)
+                         pdp-pretty-print-result-p))
+         (format-handler (if pretty-print
+                             (lambda (msg) (message "Not implemented"))
+                           (lambda (msg) (pdp--msg-get msg "result"))))
+         (insert-handler (cl-case destination
+                           (minibuffer #'pdp--eval-minibuffer-handler)
+                           (result-buffer #'pdp--eval-to-buffer-handler)
+                           (insert #'pdp--eval-insert-handler)
+                           (repl (lambda (_) (message "Not implemented"))))))
+    (lambda (msg)
+      (funcall
+       insert-handler
+       (funcall format-handler msg)))))
+
+(defun pdp-op-eval (code-str start line opts)
   (set-text-properties 0 (length code-str) nil code-str)
   (let ((msg (pdp-msg
               `(("op" . "eval")
                 ("code" . ,code-str)
                 ("line" . ,line)
                 ("start" . ,start)))))
-    (pdp-send
-     ;; insert result on next line in the src buffer
-     (cond
-      ((or (equal insert 1) (equal insert '(4)))
-       (pdp-add-handler
-        msg
-        (lambda (msg)
-          (when (not (and (bolp) (eolp)))
-            (end-of-line)
-            (insert "\n"))
-          (insert "=> ")
-          (insert (pdp--msg-get msg "result")))))
-      ;; insert result into a *pdp-result* buffer
-      ((equal insert 2)
-       (pdp-add-handler
-        msg
-        (lambda (msg)
-          (with-current-buffer (get-buffer-create pdp--result-buffer)
-            (erase-buffer)
-            (insert (pdp--msg-get msg "result"))
-            (goto-char (point-min))
-            (display-buffer (current-buffer))
-            (piglet-mode)
-            ;; (read-only-mode)
-            ;; (local-set-key (kbd "q") (lambda () (interactive) (kill-buffer-and-window)))
-            ))))
-      (t msg)))))
+    (pdp-send (pdp-add-handler msg (pdp--get-eval-handler opts)))))
 
 (setq pdp--start-query
       (treesit-query-compile
@@ -174,85 +220,134 @@
              (with-current-buffer (find-file (json-parse-string file))
                (goto-char (string-to-number char))))))))))
 
-(defun pdp-eval-node (node insert)
+(defun pdp-eval-node (node opts)
   (pdp-op-eval
    (treesit-node-text node)
    (treesit-node-start node)
    (line-number-at-pos (treesit-node-start node))
-   insert))
+   opts))
 
-(defun pdp-eval-outer-sexp (prefix)
-  "Evaluate the outermost sexp at point. If PREFIX exists or is 1 then insert
-   the result into the current buffer. If PREFIX is 2 then insert the result
-   into a *pdp-result* buffer."
-  (interactive "P")
-  (pdp-eval-node
-   (alist-get
-    'expr
-    (treesit-query-capture 'piglet
-                           '((list) @expr) (point) (+ (point) 1)))
-   prefix))
+(defun pdp--eval-prefix-to-opts (prefix-arg)
+  (cl-case prefix-arg
+    (1 '((destination . insert)))
+    (2 '((destination . result-buffer)))
+    (t '())))
 
-(defun pdp-eval-outer-sexp-to-comment ()
-  "Helper function to call `pdp-eval-outer-sexp` and inserts the result as a
-  comment on the next line."
-  (interactive)
-  (let ((current-prefix-arg 1))
-    (call-interactively #'pdp-eval-outer-sexp)))
+(defun pdp--eval (opts)
+  (cl-case (cdr (assoc 'form opts))
+    (last-sexp (let* ((start (scan-sexps (point) -1))
+                      (node (treesit-node-at start)))
+                 (pdp-eval-node
+                  (if (treesit-node-check node 'named)
+                      node
+                    (treesit-node-parent node))
+                  opts)))
 
-(defun pdp-eval-outer-sexp-to-buffer ()
-  "Helper function to call `pdp-eval-outer-sexp` and inserts the result into a
-  *pdp-result* buffer."
-  (interactive)
-  (let ((current-prefix-arg 2))
-    (call-interactively #'pdp-eval-outer-sexp)))
+    (outer-sexp (pdp-eval-node
+                 (alist-get
+                  'expr
+                  (or (treesit-query-capture 'piglet
+                                             '((list) @expr) (point) (+ (point) 1))
+                      (treesit-query-capture 'piglet
+                                             '((dict) @expr) (point) (+ (point) 1))))
+                 opts))
+
+    (buffer (pdp-op-eval
+             (buffer-substring (point-min) (point-max)) 0 0
+             opts))
+
+    (region (pdp-op-eval
+             (buffer-substring (mark) (point))
+             (mark)
+             (line-number-at-pos (mark))
+             opts))))
 
 (defun pdp-eval-last-sexp (prefix)
   "Evaluate the last sexp at point. If PREFIX exists or is 1 then insert
    the result into the current buffer. If PREFIX is 2 then insert the result
    into a *pdp-result* buffer."
   (interactive "P")
-  (let* ((start (scan-sexps (point) -1))
-         (node (treesit-node-at start)))
-    (pdp-eval-node
-     (if (treesit-node-check node 'named)
-         node
-       (treesit-node-parent node))
-     prefix)))
+  (pdp--eval (cons '(form . last-sexp) (pdp--eval-prefix-to-opts prefix))))
 
-(defun pdp-eval-last-sexp-to-comment ()
-  "Helper function to call `pdp-eval-last-sexp` and inserts the result as a
-  comment on the next line."
-  (interactive)
-  (let ((current-prefix-arg 1))
-    (call-interactively #'pdp-eval-last-sexp)))
+(defun pdp-eval-outer-sexp (prefix)
+  "Evaluate the outermost sexp at point. If PREFIX exists or is 1 then insert
+   the result into the current buffer. If PREFIX is 2 then insert the result
+   into a *pdp-result* buffer."
+  (interactive "P")
+  (pdp--eval (cons '(form . outer-sexp) (pdp--eval-prefix-to-opts prefix))))
 
-(defun pdp-eval-last-sexp-to-buffer ()
-  "Helper function to call `pdp-eval-last-sexp` and inserts the result into a
-  *pdp-result* buffer."
-  (interactive)
-  (let ((current-prefix-arg 2))
-    (call-interactively #'pdp-eval-last-sexp)))
+(defun pdp-eval-buffer (prefix)
+  "Evaluate the entire buffer"
+  (interactive "P")
+  (pdp--eval (cons '(form . buffer) (pdp--eval-prefix-to-opts prefix))))
 
-(defun pdp-eval-buffer ()
-  (interactive)
-  (pdp-op-eval
-   (buffer-substring (point-min) (point-max)) 0 0
-   nil))
+(defun pdp-eval-region (prefix)
+  "Evaluate the currently selected region."
+  (interactive "P")
+  (pdp--eval (cons '(form . region) (pdp--eval-prefix-to-opts prefix))))
 
-(defun pdp-eval-region ()
+(defun pdp-toggle-result-destination ()
+  "Change the default location where evalation results are shown."
   (interactive)
-  (pdp-op-eval
-   (buffer-substring (mark) (point))
-   (mark)
-   (line-number-at-pos (mark))
-   nil))
+  (let ((next (cl-case pdp-result-destination
+                (minibuffer 'result-buffer)
+                (result-buffer 'repl-buffer)
+                (repl-buffer 'minibuffer))))
+    (customize-save-variable 'pdp-result-destination next)
+    (message (concat "[PDP] Evaluation results will go to "
+                     (cl-case next
+                       (minibuffer "the minibuffer")
+                       (repl-buffer "the piglet REPL buffer")
+                       (result-buffer "a separate result buffer"))))))
+
+(defun pdp-toggle-pretty-printing ()
+  "Toggle pretty printing of results on/off"
+  (interactive)
+  (let ((next (not pdp-pretty-print-result-p)))
+    (customize-save-variable 'pdp-pretty-print-result-p next)
+    (message (concat "[PDP] Pretty-printing has been turned "
+                     (if next "on." "off.")))))
+
+;; Generate all permutations, for direct access that overrides the toggles
+(dolist (form '((last-sexp . "the last expression before point")
+                (outer-sexp . "the top-level expression at point")
+                (buffer . "the entire buffer")
+                (region . "the currently selected region")))
+  (dolist (destination '((minibuffer . "in the minibuffer")
+                         (insert . "inserted into the current buffer")
+                         (result-buffer . "in a separate result buffer")
+                         (repl . "inserted into the REPL buffer")))
+    (dolist (pretty-print '(nil t))
+      (defalias (intern (concat "pdp-eval-"
+                                (symbol-name (car form))
+                                "-to-"
+                                (symbol-name (car destination))
+                                (if pretty-print
+                                    "-pretty-print"
+                                  "")))
+        `(lambda ()
+           ,(concat "Evaluate " (cdr form) " and show the result\n" (cdr destination)
+                    (if pretty-print
+                        ", pretty-printed."
+                      "."))
+           (interactive)
+           (pdp--eval '((form . ,(car form))
+                        (destination . ,(car destination))
+                        (pretty-print . ,pretty-print))))))))
 
 (provide 'pdp)
 
 
 ;; (pdp-stop-server!)
 ;; (pdp-start-server!)
+
+;; (let ((msg
+;;        '(("op" . "eval") ("code" . "1234") ("line" . 27) ("start" . 796) ("location" . "/home/arne/Piglet/piglet-lang/packages/piglet/src/pdp-client.pig") ("module" . #("pdp-client" 0 10 (face default fontified t))) ("package" . "https://piglet-lang.org/packages/piglet") ("reply-to" . 1385))
+;;        ))
+;;   (message (apply 'concat (mapcar (lambda (x) (format "%02x" x))
+;;                                   (cbor<-elisp msg)))))
+
+;; (pdp-send '(("op" . "eval") ("code" . "1235") ))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; pdp.el ends here
