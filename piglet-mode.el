@@ -113,6 +113,7 @@
   (treesit-major-mode-setup))
 
 (sp-local-pair 'piglet-mode "'" nil :actions nil)
+(sp-local-pair 'piglet-mode "`" nil :actions nil)
 
 (setq piglet--find-package-name-query
       (treesit-query-compile
