@@ -109,9 +109,14 @@
 (defun pdp-msg (kvs)
   (append
    kvs
-   `(("location" . ,buffer-file-name)
-     ("module" . ,(piglet--module-name))
-     ("package" . ,piglet-package-name))))
+   (seq-remove
+    (lambda (pair)
+      (not (cdr pair)))
+    `(("location" . ,buffer-file-name)
+      ("module" . ,(piglet--module-name))
+      ("package" . ,(if (boundp 'piglet-package-name)
+                        piglet-package-name
+                      nil))))))
 
 (defun pdp-add-handler (msg handler)
   (setq pdp--message-counter (+ pdp--message-counter 1))
