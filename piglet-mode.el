@@ -132,16 +132,15 @@
             (#equal @list-head \"module\"))"))
 
 (defun piglet--package-name (file)
-  (let* ((pkg-root (locate-dominating-file file "package.pig"))
-         (fallback (concat "file://" file "")))
+  (let* ((pkg-root (locate-dominating-file file "package.pig")))
     (if (not pkg-root)
-        fallback
+        (concat "file://" (directory-file-name (file-name-directory file)))
       (let ((pkg-pig (expand-file-name "package.pig" pkg-root)))
         (with-temp-buffer
           (insert-file-contents pkg-pig)
           (treesit-parser-create 'piglet)
           (let ((node (cdr (assoc 'sym (treesit-query-capture 'piglet piglet--find-package-name-query)))))
-            (if nod (treesit-node-text node) fallback)))))))
+            (if node (treesit-node-text node) (concat "file://" (directory-file-name (expand-file-name pkg-root))))))))))
 
 (defun piglet--module-name ()
   (treesit-node-text
@@ -194,9 +193,10 @@
 
   (treesit-major-mode-setup)
 
-  (setq-local piglet-package-name (if buffer-file-name
-                                      (piglet--package-name buffer-file-name)
-                                    (piglet--package-name default-directory))))
+  (setq-local piglet-package-name
+              (if buffer-file-name
+                  (piglet--package-name buffer-file-name)
+                (piglet--package-name default-directory))))
 
 
 (add-to-list 'auto-mode-alist '("\\.pig\\'" . piglet-mode)) ;; currently in use
