@@ -234,8 +234,9 @@
 
 (defun pdp--eval-prefix-to-opts (prefix-arg)
   (cl-case prefix-arg
-    (1 '((destination . insert)))
-    (2 '((destination . result-buffer)))
+    (4 '((destination . insert))) ;; C-u
+    (2 '((destination . result-buffer))) ;; C-u 2
+    (16 '((destination . result-buffer))) ;; C-u C-u
     (t '())))
 
 (defun pdp--eval (opts)
@@ -271,24 +272,25 @@
   "Evaluate the last sexp at point. If PREFIX exists or is 1 then insert
    the result into the current buffer. If PREFIX is 2 then insert the result
    into a *pdp-result* buffer."
-  (interactive "P")
+  (interactive "p")
   (pdp--eval (cons '(form . last-sexp) (pdp--eval-prefix-to-opts prefix))))
+
 
 (defun pdp-eval-outer-sexp (prefix)
   "Evaluate the outermost sexp at point. If PREFIX exists or is 1 then insert
    the result into the current buffer. If PREFIX is 2 then insert the result
    into a *pdp-result* buffer."
-  (interactive "P")
+  (interactive "p")
   (pdp--eval (cons '(form . outer-sexp) (pdp--eval-prefix-to-opts prefix))))
 
 (defun pdp-eval-buffer (prefix)
   "Evaluate the entire buffer"
-  (interactive "P")
+  (interactive "p")
   (pdp--eval (cons '(form . buffer) (pdp--eval-prefix-to-opts prefix))))
 
 (defun pdp-eval-region (prefix)
   "Evaluate the currently selected region."
-  (interactive "P")
+  (interactive "p")
   (pdp--eval (cons '(form . region) (pdp--eval-prefix-to-opts prefix))))
 
 (defun pdp-toggle-result-destination ()
