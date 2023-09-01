@@ -33,5 +33,7 @@
 
 (add-hook 'piglet-mode-hook (lambda () (setq-local company-backends '(piglet-company-backend))))
 
+(provide 'piglet-company)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; piglet-company.el ends here
