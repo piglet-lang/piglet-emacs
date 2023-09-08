@@ -2,7 +2,7 @@
 
 ;; Author: Arne Brasseur <arne@arnebrasseur.net>
 ;; Filename: pdp.el
-;; Package-Requires: ((websocket) (cbor))
+;; Package-Requires: ((websocket))
 ;; Keywords: piglet languages repl
 
 ;;; Commentary:
@@ -10,9 +10,10 @@
 ;;; Code:
 
 (require 'websocket)
-(require 'cbor)
 (require 'seq)
 (require 'xref)
+
+(require 'piglet-cbor)
 
 (defcustom pdp-result-buffer-name "*piglet-result*"
   "Buffer name to use when showing evaluation results in a separate buffer."
@@ -64,9 +65,10 @@
   (message "[Piglet] PDP conn opened, %d active connections" (length pdp--connections)))
 
 (defun pdp--on-message (ws frame)
-  (let* ((msg (cbor->elisp (websocket-frame-payload frame)))
-         (op (pdp--msg-get msg "op"))
-         (to (pdp--msg-get msg "to"))
+  (let* ((msg (piglet-cbor->elisp (websocket-frame-payload frame)))
+         ;; (_ (message "RECEIVED %S" msg))
+         (op (pdp--msg-get msg :op))
+         (to (pdp--msg-get msg :to))
          (handler (and to (alist-get to pdp--handlers))))
     (when handler
       (funcall handler msg))))
@@ -112,24 +114,24 @@
    (seq-remove
     (lambda (pair)
       (not (cdr pair)))
-    `(("location" . ,buffer-file-name)
-      ("module" . ,(piglet--module-name))
-      ("package" . ,(if (boundp 'piglet-package-name)
-                        piglet-package-name
-                      nil))))))
+    `((:location . ,buffer-file-name)
+      (:module . ,(piglet--module-name))
+      (:package . ,(if (boundp 'piglet-package-name)
+                       piglet-package-name
+                     nil))))))
 
 (defun pdp-add-handler (msg handler)
   (setq pdp--message-counter (+ pdp--message-counter 1))
   (setq pdp--handlers (cons (cons pdp--message-counter handler)
                             pdp--handlers))
   (append msg
-          `(("reply-to" . ,pdp--message-counter))))
+          `((:reply-to . ,pdp--message-counter))))
 
 (defun pdp-send (msg)
   ;; (message "[PDP] -> %S" msg)
   ;; (message (apply 'concat (mapcar (lambda (x) (format "%02x" x))
-  ;;                                 (cbor<-elisp msg))))
-  (let ((payload (cbor<-elisp msg)))
+  ;;                                 (piglet-cbor<-elisp msg))))
+  (let ((payload (piglet-cbor<-elisp msg)))
     (seq-do (lambda (client)
               (when (websocket-openp client)
                 (websocket-send
@@ -167,7 +169,7 @@
                          pdp-pretty-print-result-p))
          (format-handler (if pretty-print
                              (lambda (msg) (message "Not implemented"))
-                           (lambda (msg) (pdp--msg-get msg "result"))))
+                           (lambda (msg) (pdp--msg-get msg :result))))
          (insert-handler (cl-case destination
                            (minibuffer #'pdp--eval-minibuffer-handler)
                            (result-buffer #'pdp--eval-to-buffer-handler)
@@ -181,10 +183,10 @@
 (defun pdp-op-eval (code-str start line opts)
   (set-text-properties 0 (length code-str) nil code-str)
   (let ((msg (pdp-msg
-              `(("op" . "eval")
-                ("code" . ,code-str)
-                ("line" . ,line)
-                ("start" . ,start)))))
+              `((:op . "eval")
+                (:code . ,code-str)
+                (:line . ,line)
+                (:start . ,start)))))
     (pdp-send (pdp-add-handler msg (pdp--get-eval-handler opts)))))
 
 (setq pdp--start-query
@@ -201,8 +203,8 @@
   (pdp-send
    (pdp-add-handler
     (pdp-msg
-     `(("op" . "resolve-meta")
-       ("var" . ,var-sym)))
+     `((:op . "resolve-meta")
+       (:var . ,var-sym)))
     handler)))
 
 ;; When used with a browser it's best to enable `url-handler-mode'
@@ -214,9 +216,8 @@
        (treesit-node-text node)
        (lambda (reply)
          (xref-push-marker-stack)
-         ;; (message "RESULT %s" reply)
          (with-temp-buffer
-           (insert (pdp--msg-get reply "result"))
+           (insert (pdp--msg-get reply :result))
            (treesit-parser-create 'piglet)
            (let ((file (treesit-node-text
                         (cdr (assoc 'val (treesit-query-capture 'piglet pdp--file-query)))))
@@ -343,18 +344,6 @@
                         (pretty-print . ,pretty-print))))))))
 
 (provide 'pdp)
-
-
-;; (pdp-stop-server!)
-;; (pdp-start-server!)
-
-;; (let ((msg
-;;        '(("op" . "eval") ("code" . "1234") ("line" . 27) ("start" . 796) ("location" . "/home/arne/Piglet/piglet-lang/packages/piglet/src/pdp-client.pig") ("module" . #("pdp-client" 0 10 (face default fontified t))) ("package" . "https://piglet-lang.org/packages/piglet") ("reply-to" . 1385))
-;;        ))
-;;   (message (apply 'concat (mapcar (lambda (x) (format "%02x" x))
-;;                                   (cbor<-elisp msg)))))
-
-;; (pdp-send '(("op" . "eval") ("code" . "1235") ))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; pdp.el ends here

@@ -24,10 +24,10 @@
      `(:async . ,(lambda (callback)
                    (pdp-send
                     (pdp-add-handler
-                     (pdp-msg `(("op" . "completion-candidates")
-                                ("prefix" . ,arg)))
+                     (pdp-msg `((:op . "completion-candidates")
+                                (:prefix . ,arg)))
                      (lambda (reply)
-                       (let ((cands (seq-into (pdp--msg-get reply "candidates")
+                       (let ((cands (seq-into (pdp--msg-get reply :candidates)
                                               'list)))
                          (funcall callback cands))))))))))
 
