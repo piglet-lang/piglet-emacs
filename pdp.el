@@ -161,10 +161,10 @@
     (piglet-mode)))
 
 (defun pdp--get-eval-handler (opts)
-  (let* ((destination (if-let ((dest (assoc 'destination opts)))
+  (let* ((destination (if-let* ((dest (assoc 'destination opts)))
                           (cdr dest)
                         pdp-result-destination))
-         (pretty-print (if-let ((pp (assoc 'pretty-print opts)))
+         (pretty-print (if-let* ((pp (assoc 'pretty-print opts)))
                            (cdr pp)
                          pdp-pretty-print-result-p))
          (format-handler (if pretty-print
