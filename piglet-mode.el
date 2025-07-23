@@ -14,6 +14,7 @@
 (require 'rainbow-delimiters)
 (require 'aggressive-indent)
 (require 'smartparens)
+(require 'filenotify)
 
 (when (not (fboundp 'treesit-language-available-p))
   (read-key "WARNING: Emacs was not compiled with tree-sitter support (--with-tree-sitter), make sure libtree-sitter0 is installed before building."))
@@ -28,6 +29,10 @@
      ((parent-is "list") first-sibling 2)
      ((parent-is "vector") first-sibling 1)
      ((parent-is "dict") first-sibling 1))))
+
+(defvar piglet-package-names
+  nil
+  "Association list from package.pig location to :pkg:name")
 
 (setq piglet-mode--font-lock-settings
       (treesit-font-lock-rules
@@ -131,16 +136,38 @@
             (symbol) @list-head . (symbol) @name)
             (#equal @list-head \"module\"))"))
 
-(defun piglet--package-name (file)
-  (let* ((pkg-root (locate-dominating-file file "package.pig")))
-    (if (not pkg-root)
-        (concat "file://" (directory-file-name (file-name-directory file)))
-      (let ((pkg-pig (expand-file-name "package.pig" pkg-root)))
-        (with-temp-buffer
-          (insert-file-contents pkg-pig)
-          (treesit-parser-create 'piglet)
-          (let ((node (cdr (assoc 'sym (treesit-query-capture 'piglet piglet--find-package-name-query)))))
-            (if node (treesit-node-text node) (concat "file://" (directory-file-name (expand-file-name pkg-root))))))))))
+(defun piglet--package-root (file)
+  (locate-dominating-file file "package.pig"))
+
+(defun piglet--package-name* (pkg-root)
+  (if (not pkg-root)
+      (concat "file://" (directory-file-name (file-name-directory file)))
+    (let ((pkg-pig (expand-file-name "package.pig" pkg-root)))
+      (with-temp-buffer
+        (insert-file-contents pkg-pig)
+        (treesit-parser-create 'piglet)
+        (let ((node (cdr (assoc 'sym (treesit-query-capture 'piglet piglet--find-package-name-query)))))
+          (if node (treesit-node-text node) (concat "file://" (directory-file-name (expand-file-name pkg-root)))))))))
+
+(defun piglet--package-name (pkg-root)
+  "Return the package for the given package root directory, gets memoized,
+but also updated when package.pig changes."
+  (when pkg-root
+    (or (cdr (assoc pkg-root piglet-package-names))
+        (let* ((pkg-name (piglet--package-name* pkg-root)))
+          (setq piglet-package-names (cons (cons pkg-root pkg-name)
+                                           piglet-package-names))
+          (file-notify-add-watch
+           (expand-file-name "package.pig" pkg-root)
+           '(change)
+           (lambda (event)
+             (setq piglet-package-names (assq-delete-all pkg-root piglet-package-names))
+             (piglet--package-name pkg-root)))
+          pkg-name))))
+
+(defun piglet-package-name (file)
+  "Return the package name for the given piglet file"
+  (piglet--package-name (piglet--package-root file)))
 
 (defun piglet--module-name ()
   (treesit-node-text
@@ -191,12 +218,7 @@
   ;; Imenu.
   ;; (setq-local treesit-simple-imenu-settings '())
 
-  (treesit-major-mode-setup)
-
-  (setq-local piglet-package-name
-              (if buffer-file-name
-                  (piglet--package-name buffer-file-name)
-                (piglet--package-name default-directory))))
+  (treesit-major-mode-setup))
 
 
 (add-to-list 'auto-mode-alist '("\\.pig\\'" . piglet-mode)) ;; currently in use

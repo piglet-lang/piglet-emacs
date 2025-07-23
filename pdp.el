@@ -116,9 +116,7 @@
       (not (cdr pair)))
     `((:location . ,buffer-file-name)
       (:module . ,(piglet--module-name))
-      (:package . ,(if (boundp 'piglet-package-name)
-                       piglet-package-name
-                     nil))))))
+      (:package . ,(piglet-package-name buffer-file-name))))))
 
 (defun pdp-add-handler (msg handler)
   (setq pdp--message-counter (+ pdp--message-counter 1))
