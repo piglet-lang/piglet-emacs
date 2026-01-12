@@ -1,4 +1,4 @@
-;;; piglet-company.el --- Piglet Dev Protocol, interactive programming over websocket -*- lexical-binding: t -*-
+;;; piglet-company.el --- Piglet Company Mode, piglet completion support -*- lexical-binding: t -*-
 
 ;; Author: Arne Brasseur <arne@arnebrasseur.net>
 ;; Filename: piglet-company.el
